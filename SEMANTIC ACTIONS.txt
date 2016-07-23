@@ -1,0 +1,613 @@
+SEMANTIC ACTIONS  v1.25
+
+[See "Modification history" at the end of this file]
+
+The syntax-directed definition of the Pascal grammar is implemented using the 
+semantic actions given below, which correspond to the numeric values in the 
+syntax-directed definition. The actions evaluate both synthesized and inherited 
+attributes over the syntax tree describing the parsed input. 
+
+Initializations:
+
+INSERT/SEARCH   = INSERT    { flags insertion/search mode in symbol table }
+GLOBAL/LOCAL    = GLOBAL    { flags global vs. local environment } 
+ARRAY/SIMPLE    = SIMPLE    { flags array vs. simple variable }
+GLOBAL_MEM      = 0         { next offset available in global memory }
+LOCAL_MEM       = 0         { next offset available in current stack frame }
+NEXTQUAD        = 1         { next position in quadruple listing }
+GLOBAL_STORE    = 0         { quadruple array location of ALLOC statement for 
+                              global memory }
+LOCAL_STORE     = 0         { quadruple array location of ALLOC statement for 
+                              local memory }
+CURRENTFUNCTION = NIL       { symbol table entry for function being parsed }
+PARMCOUNT       = NIL       { stack for no. of parameters in proc declaration or call }
+
+
+READ and WRITE  These two names should be pre-installed in the
+                symbol table as procedure_entry
+
+MAIN            Pre-install this name in the symbol table as a procedure_entry,
+                number_of_parameters = 0
+
+
+Other variables and names used in the actions:
+
+MSIZE           used to compute the size of a variable or array in
+                order to add to the counter for global memory
+OFFSET          used to refer to the offset value for a subscripted 
+                variable appearing on the left side of an assignment
+                operator. If there is no subscript, the offset is set 
+                to NULL.
+ETYPE           refers to a "type" given internally to each expression and
+                operand, either ARITHMETIC or RELATIONAL
+E.TRUE, 
+E.FALSE,
+SKIP_ELSE       pointers to lists of integers representing quadruple
+                numbers, used to enable backpatching targets in code
+                generated for relational expressions and
+                flow-of-control statements
+BEGINLOOP       integer variable that saves the quadruple number for
+                the statement at the top of a while loop, so that a
+                "goto" targetting that quadruple can be generated after
+                processing the loop body
+
+NEXTPARM        pointer to a stack of pointers to items in the parameter information
+                list for procedures and functions.
+
+
+Functions:
+
+
+CREATE(NAME,type)
+
+Creates a new memory location by doing the following:
+ - insert $$NAME in symbol table (Variable_entry)
+ - $$NAME.type = type
+ - $$NAME.address = NEGATIVE value of GLOBAL_MEM or LOCAL_MEM (as appropriate)
+ - increment GLOBAL_MEM or LOCAL_MEM (as appropriate)
+ - return $$NAME^
+
+
+GEN(TVICODE)
+
+Generates a new quadruple containing the instruction given in TVICODE. 
+
+  GEN replaces all id references with memory addresses:
+           _n   for offsets in GLOBAL memory
+           %n   for offsets into the current stack frame (LOCAL variables)
+           ^%n  for parameters (dereferences n)
+      ("n" is the absolute value of the corresponding id.address).
+
+  GEN also handles putting constants in actual memory locations. Before  
+  generating the quadruple, GEN does the following for each id:
+
+           if id^.is_constant
+                CREATE(TEMP,id.type)
+                GEN(move #,$$TEMP)   {# is the value of the constant}
+  
+  When the quadruple containing the constant reference is generated, $$TEMP's   
+  address is used instead. 
+
+  All parameters are passed by reference. So, when generating PARAM statements, 
+  GEN produces the following:
+
+        PARAM @_n   for global memory
+        PARAM @%n   for (local) variables in current stack frame
+        PARAM %n    for parameters that are themselves parameters
+           
+  GEN also increments NEXTQUAD after each quadruple is generated.
+
+TYPECHECK(id1,id2)
+
+Checks the types of id1 and id2, and returns the following :
+   0   if id1 and id2 are both integers
+   1   if id1 and id2 are both reals
+   2   if id1 is real and id2 is integer
+   3   if id1 is integer and id2 is real
+
+
+MAKELIST(i)
+Creates a new list containing only i, an index into array of quadruples. Returns 
+a pointer to the list it has made.
+
+
+MERGE(p1,p2)
+Concatenates the lists pointed to by p1 and p2, returns a pointer to the 
+concatenated list.
+
+
+BACKPATCH(p,i)
+Inserts i as the target label for each of the statements on the list pointed to 
+by p.
+
+--------
+Notation
+--------
+
+ 
+caret (^) :     used for pointer notation when
+                referring to symbol table pointers
+
+                Examples
+                  - id^ is a symbol table pointer to the entry with
+                     name "id"
+                  - id^.address refers to the address field of the symbol table
+	             entry for id
+
+underscore(_) : indicates empty fields that will be filled in later in
+                a quadruple
+                
+                Examples: 
+                  - "ALLOC _" indicates the TVI operator ALLOC, which
+		     takes a number indicating the size of memory to
+		     allocate. Because we do not know how much memory
+		     will ultimately be needed when the ALLOC statement is
+		     generated, the underscore indicates that the
+		     field is temporarily unfilled.
+                  -  branching statements, GOTO also use this notation
+		     when we are calling GEN 
+
+
+
+
+==================== 
+The Semantic Actions
+====================
+
+
+#1   : INSERT/SEARCH = INSERT
+     
+#2   : INSERT/SEARCH = SEARCH
+
+#3   : TYP = pop TYPE 
+       if ARRAY/SIMPLE = ARRAY
+          UB = pop CONSTANT
+          LB = pop CONSTANT
+          MSIZE = (UB - LB) + 1
+//////////Is this for each token that has IDENTIFIER type 
+//////////or for all items on the stack?
+          For each id on the semantic stack:
+            ID = pop id
+            if GLOBAL/LOCAL = GLOBAL           
+               insert id in global symbol table (Array_entry)
+            else insert id in local symbol table (Array_entry)
+            id^.type = TYP 
+            if GLOBAL/LOCAL = GLOBAL
+               - id^.address = GLOBAL_MEM 
+               - GLOBAL_MEM = GLOBAL_MEM + MSIZE
+            else
+               - id^.address = LOCAL_MEM 
+               - LOCAL_MEM = LOCAL_MEM + MSIZE
+
+       else          /* simple variable */
+          For each id on the semantic stack:
+            ID = pop id
+            if GLOBAL/LOCAL = GLOBAL           
+               insert id in global symbol table (Variable_entry)
+            else insert id in local symbol table (Variable_entry)
+            id^.type = TYP 
+            if GLOBAL/LOCAL = GLOBAL
+               - id^.address = GLOBAL_MEM 
+               - GLOBAL_MEM = GLOBAL_MEM + 1
+            else
+               - id^.address = LOCAL_MEM 
+               - LOCAL_MEM = LOCAL_MEM + 1
+
+     : ARRAY/SIMPLE = SIMPLE
+
+
+#4   : push TYPE
+
+#5   : INSERT/SEARCH = SEARCH
+     : GEN(PROCBEGIN,id)
+     : pop id
+     : LOCAL_STORE = NEXTQUAD
+     : GEN(alloc,_)
+
+#6   : ARRAY/SIMPLE = ARRAY
+
+#7   : push CONSTANT
+
+#9   : for each id on semantic stack
+           - insert id in symbol table (variable_entry), mark as RESTRICTED
+     : pop ids
+     : INSERT/SEARCH = SEARCH
+     : GEN(CODE)
+     : GEN(call,main,0)
+     : GEN(exit)
+
+#11  : GLOBAL/LOCAL = GLOBAL
+     : delete local symbol table entries
+     : CURRENTFUNCTION = nil
+     : Fill in quadruple at location LOCAL_STORE with value of LOCAL_MEM
+     : GEN(free,LOCAL_MEM)
+     : GEN(PROCEND)
+
+#13  : push id
+
+#15  : insert id in symbol table (function_entry)
+     : push id^
+     : CREATE(FUN_NAME,INTEGER)  {dummy type until we know the real one} 
+     : id^.result = $$FUN_NAME^
+     : GLOBAL/LOCAL = LOCAL
+     : instantiate Local symbol table
+     : LOCAL_MEM = 0
+
+#16  : id^.type = TYPE
+     : $$FUN_NAME^.type = TYPE
+     : CURRENTFUNCTION = id^
+     : pop TYPE
+
+#17  : insert id in symbol table (procedure_entry)
+     : push id^
+     : GLOBAL/LOCAL = LOCAL
+     : instantiate Local symbol table
+     : LOCAL_MEM = 0
+
+#19  : PARMCOUNT = 0
+
+#20  : id^.number_of_parameters = PARMCOUNT
+     : pop PARMCOUNT
+
+#21  : for each id (parameter) on stack:
+           add a new element to id^.parminfo   // id is procedure name
+           if ARRAY
+                - insert symbol table entry (array, is_parameter returns true)
+                - id^.upper_bound = CONSTANT(1)
+                - id^.lower_bound = CONSTANT(2)
+                - set UBOUND and LBOUND in the current element of
+                  PARMINFO to id^.ubound and id^.lbound
+                - set array flag in current PARMINFO element to TRUE
+           else 
+                - create new symbol table entry (variable entry, with is_parameter returning true)
+                - set array flag in current PARMINFO entry to FALSE
+           id^.address = LOCAL_MEM 
+           LOCAL_MEM = LOCAL_MEM + 1
+           id^.type = TYPE {on stack}
+           set TYPE in current entry of PARMINFO to TYPE
+           increment PARMCOUNT
+     : ARRAY/SIMPLE = SIMPLE
+     : pop TYPE, ids
+
+#22  : if ETYPE <> RELATIONAL, ERROR
+     : pop ETYPE
+     : BACKPATCH(E.TRUE, NEXTQUAD)
+ 
+#24  : set BEGINLOOP = NEXTQUAD
+     : push BEGINLOOP
+
+#25  : if ETYPE <> RELATIONAL, ERROR
+     : pop ETYPE 
+     : BACKPATCH(E.TRUE, NEXTQUAD)
+     
+#26  : GEN(goto BEGINLOOP)            // pushed on stack in #24
+     : BACKPATCH(E.FALSE, NEXTQUAD)
+     : pop E.TRUE, E.FALSE, BEGINLOOP
+
+#27  : set SKIP_ELSE = makelist(NEXTQUAD)
+     : push SKIP_ELSE
+     : GEN(goto _ )
+     : BACKPATCH(E.FALSE, NEXTQUAD)
+
+#28  : BACKPATCH(SKIP_ELSE, NEXTQUAD)  // pushed on stack in #27
+     : pop SKIP_ELSE, E.FALSE, E.TRUE
+
+#29  : BACKPATCH(E.FALSE,NEXTQUAD)
+     : pop E.FALSE, E.TRUE
+
+#30  : lookup id in symbol table
+     : if not found, ERROR (undeclared variable)
+//////// push the lookUp value of id, which is a symboltableentry
+     : push id^
+     : push ETYPE(ARITHMETIC)
+
+#31  : if ETYPE <> ARITHMETIC, ERROR
+     : if TYPECHECK(id1,id2) = 3, ERROR 
+     : if TYPECHECK(id1,id2) = 2
+             CREATE(TEMP,REAL) 
+             GEN(ltof,id2,$$TEMP)
+             if OFFSET = NULL, 
+                   GEN(move,$$TEMP,id1) 
+             else GEN(stor $$TEMP,offset,id1)
+     : else if OFFSET = NULL, 
+               GEN(move,id2,id1) 
+            else GEN(stor id2,offset,id1)
+     : pop ETYPE, id1, offset, ETYPE, id2
+
+#32  : if not id^.is_array, ERROR
+
+#33  : if ETYPE <> ARITHMETIC, ERROR
+     : pop ETYPE
+     : if id^.type <> INTEGER, ERROR  {id is pointer on top of stack}
+     : CREATE(TEMP,INTEGER)
+     : GEN(sub,$$TEMP(1),array_name.lbound,$$TEMP) {array_name is id on
+     :                                               bottom of stack}
+     : 
+     : pop $$TEMP(1)
+     : push $$TEMP
+
+#34  : if id on stack is a function, call action 52
+     : else push NULL OFFSET
+
+#35  : push new element on PARMCOUNT stack
+     : PARMCOUNT.top = 0
+     : push new element on NEXTPARM stack
+     : set NEXTPARM = id^.parminfo    {pointer to info about parameters}
+
+#36  : if id^.number_of_parameters <> 0, ERROR
+     : GEN(call,id,0)
+     : pop id, ETYPE
+
+#37  : if ETYPE <> ARITHMETIC, ERROR
+     : pop ETYPE
+     : if  NOT (id^.is_variable OR id^.is_constant OR
+               id^.is_function_result OR id^.is_array), ERROR
+     : increment PARMCOUNT.top
+     : if proc_or_fun^.name <> READ or WRITE:
+              {proc_or_fun is the procedure or function pointer, on
+               bottom of stack}
+          -if PARMCOUNT.top > proc_or_fun.number_of_parameters, ERROR
+          -if id^.type <> NEXTPARM^.type, ERROR 
+          -if NEXTPARM^.array = TRUE, 
+                -if id^.lbound <> NEXTPARM^.lbound OR
+                    id^.ubound <> NEXTPARM^.ubound, ERROR
+          -increment NEXTPARM   {to point to next item in parinfo list}
+
+#38  : if ETYPE <> ARITHMETIC, ERROR
+     : pop ETYPE
+     : push operator
+
+#39  : if ETYPE <> ARITHMETIC, ERROR
+     : pop ETYPE
+     : if TYPECHECK(id1,id2) = 2, 
+          CREATE(TEMP1,REAL) 
+          GEN(ltof,id2,$$TEMP1)
+          GEN(***,id1,$$TEMP1,_)   {*** replaced by blt, ble, bgt, etc.}
+     : if TYPECHECK(id1,id2) = 3, 
+          CREATE(TEMP1,REAL) 
+          GEN(ltof,id1,$$TEMP1)
+          GEN(***,$$TEMP1,id2,_)
+     : else 
+          GEN(***,id1,id2,_)
+     : GEN(goto _ )
+     : pop pointers, operator
+     : E.TRUE  = MAKELIST(NEXTQUAD - 2)
+     : E.FALSE = MAKELIST(NEXTQUAD - 1)
+     : push E.TRUE, E.FALSE 
+     : push ETYPE(RELATIONAL)
+
+#40  : push sign
+
+#41  : if ETYPE <> ARITHMETIC, ERROR
+     : pop ETYPE
+     : if sign {on stack} = UNARYMINUS:
+           -CREATE(TEMP,idtype)
+           -GEN(uminus,id,$$TEMP) 
+           -pop sign, id
+           -push $$TEMP on stack
+     : else 
+           -pop sign, id
+           -push id
+     : push ETYPE(ARITHMETIC)
+
+#42  : if operator = OR:
+           -if ETYPE <> RELATIONAL, ERROR
+           -BACKPATCH (E.FALSE, NEXTQUAD)
+     : else check ETYPE = ARITHMETIC
+     : pop ETYPE
+     : push operator
+
+#43  : if ETYPE = RELATIONAL:
+          -if operator = OR:
+          //merge the two subexpressions
+          //e1 and e2 are on the stack so nee to pop off
+          //then merge into etrue (make local variable ?)
+             -E.TRUE = MERGE (E(1).TRUE, E(2).TRUE)
+             -E.FALSE = E(2).FALSE {on stack}
+             -pop E(1).TRUE, E(1).FALSE, operator,
+              E(2).TRUE, E(2).FALSE, ETYPE
+             -push E.TRUE, E.FALSE, ETYPE(RELATIONAL)
+      : else
+             -if ETYPE <> ARITHMETIC, ERROR
+             -if TYPECHECK(id1,id2) = 0, 
+                     CREATE(TEMP,INTEGER)
+                     GEN(***,id1,id2,$$TEMP) {*** replaced by add, sub, etc.}
+             -if TYPECHECK(id1,id2) = 1, 
+                     CREATE(TEMP,REAL)
+                     GEN(f***,id1,id2,$$TEMP) 
+             -if TYPECHECK(id1,id2) = 2, 
+                     CREATE(TEMP1,REAL) 
+                     GEN(ltof,id2,$$TEMP1)
+                     CREATE(TEMP2,REAL)
+                     GEN(f***,id1,$$TEMP1,$$TEMP2)
+             -if TYPECHECK(id1,id2) = 3, 
+                     CREATE(TEMP1,REAL) 
+                     GEN(ltof,id1,$$TEMP1)
+                     CREATE(TEMP2,REAL)
+                     GEN(f***,$$TEMP1,id2,$$TEMP2)
+          -pop ids, operator, ETYPE
+          -push result variable ($$TEMP or $$TEMP2) 
+          -push ETYPE(ARITHMETIC)
+
+#44  : if ETYPE = RELATIONAL:
+     :    -if operator = AND, BACKPATCH (E.TRUE, NEXTQUAD)
+     : pop ETYPE
+     : push operator
+
+#45  : if operator = AND:
+          -if ETYPE <> RELATIONAL, ERROR
+          -E.TRUE =  E(2).TRUE
+          -E.FALSE = MERGE (E(1).FALSE, E(2).FALSE)
+          -pop E(1).TRUE, E(1).FALSE, operator,
+           E(2).TRUE, E(2).FALSE, ETYPE
+          -push E.TRUE, E.FALSE, ETYPE(RELATIONAL)
+      : else
+          -if ETYPE <> ARITHMETIC, ERROR
+          -if TYPECHECK(id1,id2) <> 0 and operator = MOD, 
+               {MOD requires integer operands}
+               ERROR
+          -if TYPECHECK(id1,id2) = 0, 
+              if operator = MOD
+                  CREATE(TEMP1,INTEGER)
+                  GEN(move,id1,$$TEMP1)
+                  CREATE(TEMP2,INTEGER)
+                  GEN(move,$$TEMP1,$$TEMP2)  
+                  GEN(sub,$$TEMP2,id2,$$TEMP1)
+                  GEN(bge,$$TEMP1,id2,NEXTQUAD-2) {result will be in $$TEMP1} 
+              else if operator = /
+                     CREATE(TEMP1,REAL)
+                     GEN(ltof,id1,$$TEMP1)
+                     CREATE(TEMP2,REAL)
+                     GEN(ltof,id2,$$TEMP2)
+                     CREATE(TEMP3,REAL)
+                     GEN(fdiv,$$TEMP1,$$TEMP2,$$TEMP3)
+                   else 
+                     CREATE(TEMP,INTEGER)
+                     GEN(***,id1,id2,$$TEMP) {*** replaced by div, mul, etc.}
+          -if TYPECHECK(id1,id2) = 1,
+                 -if operator = DIV
+                     CREATE(TEMP1,INTEGER)
+                     GEN(ftol,id1,$$TEMP1)
+                     CREATE(TEMP2,INTEGER)
+                     GEN(ftol,id2,$$TEMP2)
+                     CREATE(TEMP3,INTEGER)
+                     GEN(div,$$TEMP1,$$TEMP2,$$TEMP3)
+                  else 
+                     CREATE(TEMP,REAL)
+                     GEN(f***,id1,id2,$$TEMP) 
+          -if TYPECHECK(id1,id2) = 2, 
+                 -if operator = DIV
+                     CREATE(TEMP1,INTEGER)
+                     GEN(ftol,id1,$$TEMP1)
+                     CREATE(TEMP2,INTEGER)
+                     GEN(div,$$TEMP1,id2,$$TEMP2)
+                  else
+                     CREATE(TEMP1,REAL) 
+                     GEN(ltof,id2,$$TEMP1)
+                     CREATE(TEMP2,REAL)
+                     GEN(f***,id1,$$TEMP1,$$TEMP2)
+          -if TYPECHECK(id1,id2) = 3, 
+                 -if operator = DIV
+                     CREATE(TEMP1,INTEGER)
+                     GEN(ftol,id2,$$TEMP1)
+                     CREATE(TEMP2,INTEGER)
+                     GEN(div,id1,$$TEMP1,$$TEMP2)
+                  else
+                     CREATE(TEMP1,REAL) 
+                     GEN(ltof,id1,$$TEMP1)
+                     CREATE(TEMP2,REAL)
+                     GEN(f***,$$TEMP1,id2,$$TEMP2)
+          -pop ids, operator, ETYPE
+          -push result variable ($$TEMP or $$TEMP2)
+          -push ETYPE(ARITHMETIC)
+
+#46  : if token is an identifier,
+          - lookup in symbol table
+          - if not found, ERROR (undeclared variable)
+          - push id^
+     : if token is a constant,
+          - lookup in constant (symbol) table
+          - if not found, 
+3                 if tokentype = INTCONSTANT, set type field to INTEGER
+                 else set type field to REAL
+          - push pointer to constant entry
+     : push ETYPE(ARITHMETIC)
+
+#47  : if ETYPE <> RELATIONAL, ERROR
+     : E.TRUE = E.FALSE
+     : E.FALSE = E.TRUE
+     : pop E.TRUE, E.FALSE, ETYPE
+     : push new E.TRUE, E.FALSE
+     : push ETYPE(RELATIONAL)
+
+#48  : if offset (on stack) <> NULL,
+          -if offset.type <> INTEGER, ERROR
+           else
+             CREATE(TEMP,id^.type)
+             GEN(load id,offset,$$TEMP)
+             pop offset, ETYPE, id
+             push $$TEMP
+             push ETYPE(ARITHMETIC)
+     : else pop offset
+
+#49  : if ETYPE <> ARITHMETIC, ERROR
+     : if not id^.is_function, ERROR
+     : push new element on PARMCOUNT stack
+     : PARMCOUNT.top = 0
+     : push new element on NEXTPARM stack
+     : set NEXTPARM = id^.parminfo    {pointer to info about parameters}
+
+#50  : for each id on stack:
+        {NOTE: must be done from bottom to top}
+          -GEN(param id)
+          -LOCAL_MEM = LOCAL_MEM + 1
+          -pop id
+     : if PARMCOUNT.top > id^.number_of_parameters, ERROR
+     : GEN(call id, PARMCOUNT)
+     : pop PARMCOUNT.top, NEXTPARM.top, ETYPE
+     : CREATE(TEMP,id^.type)
+     : GEN(move,id^.result,$$TEMP) {id^.result is $$function-name}
+     : pop id
+     : push $$TEMP
+     : push ETYPE(ARITHMETIC)
+ 
+#51  : if id^.name = READ call #51READ
+     : if id^.name = WRITE call #51WRITE
+     : else
+     :   if PARMCOUNT.top <> id^.number_of_parameters, ERROR     
+     :   for each parameter (id) on stack:
+           (NOTE: must be done from bottom to top)
+            -GEN(param id)
+            -LOCAL_MEM = LOCAL_MEM + 1
+            -pop id
+     :   GEN(call,id, PARMCOUNT.top)
+     :   pop PARMCOUNT.top, NEXTPARM.top, ETYPE
+     :   pop id
+     
+#52  : if not id^.is_function, ERROR
+     : if id^.number_of_parameters > 0, ERROR
+     : GEN(call id, 0)
+     : CREATE(TEMP,id^.type)
+     : GEN(move,id^.result,$$TEMP) {id^.result is $$function-name}
+     : pop ETYPE, id
+     : push $$TEMP
+     : push ETYPE(ARITHMETIC)
+
+#53  : if id^.is_function
+          -if id <> CURRENTFUNCTION, ERROR
+          -pop ETYPE, id
+          -push id^.result {i.e., $$function-name} 
+          -push ETYPE(ARITHMETIC)
+ 
+#54  : if not id^.is_procedure, ERROR
+
+#55  : BACKPATCH(GLOBAL_STORE,GLOBAL_MEM)
+     : GEN(free GLOBAL_MEM)
+     : GEN(PROCEND)
+
+#56  : GEN(PROCBEGIN main)
+     : GLOBAL_STORE = NEXTQUAD
+     : GEN(alloc,_)
+
+{ The following actions do not appear in the grammar, but are called in the 
+  special case of input and output statements  }
+
+#51WRITE     : for each parameter on stack:
+               (NOTE: must be done from bottom to top)
+                   -GEN(print,"<id^.name> = ")   {<id^.name> is the name
+                                                 of the variable}  
+                   -if id^.type = REAL, GEN(foutp,id)
+                       else GEN(outp,id)
+                   -GEN(newl)
+                   -pop id
+             : pop PARMCOUNT.top, ETYPE
+             : pop id
+
+
+#51READ      : for each parameter on stack:
+               (NOTE: must be done from bottom to top)
+                   -if id^.type = REAL, GEN(finp,id)
+                       else GEN(inp,id)
+                   -pop id
+             : pop PARMCOUNT.top, ETYPE
+             : pop id

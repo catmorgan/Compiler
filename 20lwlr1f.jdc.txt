@@ -1,0 +1,59 @@
+﻿
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+# On branch master
+#
+# Initial commit
+#
+# Changes to be committed:
+#   (use "git rm --cached <file>..." to unstage)
+#
+#	new file:   .gitattributes
+#	new file:   .gitignore
+#	new file:   README.txt
+#	new file:   build.xml
+#	new file:   manifest.mf
+#	new file:   nbproject/build-impl.xml
+#	new file:   nbproject/genfiles.properties
+#	new file:   nbproject/private/private.properties
+#	new file:   nbproject/private/private.xml
+#	new file:   nbproject/project.properties
+#	new file:   nbproject/project.xml
+#	new file:   src/Parser/GrammarSymbol.java
+#	new file:   src/Parser/NonTerminal.java
+#	new file:   src/Parser/ParseTable.java
+#	new file:   src/Parser/Parser.java
+#	new file:   src/Parser/ParserDriver.java
+#	new file:   src/Parser/ParserError.java
+#	new file:   src/Parser/RHSTable.java
+#	new file:   src/Parser/SemanticAction.java
+#	new file:   src/SemanticActions/Quadruples.java
+#	new file:   src/SemanticActions/SemanticActions.java
+#	new file:   src/SemanticActions/SemanticError.java
+#	new file:   src/SymbolTable/ArrayEntry.java
+#	new file:   src/SymbolTable/ConstantEntry.java
+#	new file:   src/SymbolTable/FunctionEntry.java
+#	new file:   src/SymbolTable/KeywordEntry.java
+#	new file:   src/SymbolTable/ParameterInfo.java
+#	new file:   src/SymbolTable/ProcedureEntry.java
+#	new file:   src/SymbolTable/SymbolTable.java
+#	new file:   src/SymbolTable/SymbolTableDriver.java
+#	new file:   src/SymbolTable/SymbolTableEntry.java
+#	new file:   src/SymbolTable/VariableEntry.java
+#	new file:   src/lexicalanalyzer/CharStream.java
+#	new file:   src/lexicalanalyzer/CompilerError.java
+#	new file:   src/lexicalanalyzer/LexerDriver.java
+#	new file:   src/lexicalanalyzer/LexicalAnalyzer.java
+#	new file:   src/lexicalanalyzer/LexicalError.java
+#	new file:   src/lexicalanalyzer/Token.java
+#	new file:   src/lexicalanalyzer/TokenType.java
+#	new file:   tests/lextest - Copy.txt
+#	new file:   tests/lextest.dat
+#	new file:   tests/lextest2 - Copy.txt
+#	new file:   tests/lextest2.dat
+#	new file:   tests/parsetest - Copy.txt
+#	new file:   tests/parsetest.dat
+#	new file:   tests/parsetest.txt
+#	new file:   tests/symtabtest.dat
+#
+
